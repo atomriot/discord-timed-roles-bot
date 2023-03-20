@@ -1,4 +1,4 @@
-##Disclaimer: This code was written by ChatGPT and the prompts it took to get it this far. The full dialog will eventually be included as part of the repo for documentorial purposes and to see the reason why some things were done the way the were.
+## Disclaimer: This code was written by ChatGPT and the prompts it took to get it this far. The full dialog will eventually be included as part of the repo for documentorial purposes and to see the reason why some things were done the way the were.
 
 # Discord Established User Bot
 
