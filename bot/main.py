@@ -1,4 +1,3 @@
-import asyncio
 import os
 import discord
 from discord.ext import commands, tasks
@@ -8,11 +7,11 @@ from datetime import datetime, timedelta, time
 import pytz
 
 load_dotenv()
-DEBUG = os.getenv('DEBUG')
-TOKEN = os.getenv('DISCORD_TOKEN')
-DAYS_WINDOW = os.getenv('DAYS_WINDOW')
-TRIGGER_HOUR = os.getenv('TRIGGER_HOUR')
 
+TOKEN = os.getenv('DISCORD_TOKEN')
+REQUIRED_DAYS = int(os.getenv('REQUIRED_DAYS'))
+TASK_HOUR = int(os.getenv('TASK_HOUR'))
+ROLE_ID = int(os.getenv('ROLE_ID_TO_APPLY'))
 intents = discord.Intents.default()
 intents.members = True
 
@@ -28,26 +27,9 @@ db_config = {
 def get_db_connection():
     return mysql.connector.connect(**db_config)
 
-def add_user_to_db(user_id, join_date, has_established_role):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.callproc('add_user', (user_id, join_date, has_established_role))
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-def update_user_in_db(user_id, has_established_role):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.callproc('update_user', (user_id, has_established_role))
-    connection.commit()
-    cursor.close()
-    connection.close()
-
 @bot.event
 async def on_ready():
-    if DEBUG == "1":
-        print(f'{bot.user} has connected to Discord!')
+    print(f'{bot.user} has connected to Discord!')
     apply_established_role.start()
 
 @bot.event
@@ -57,47 +39,100 @@ async def on_member_join(member):
 @bot.event
 async def on_member_update(before, after):
     if before.roles != after.roles:
-        check_and_apply_established_role(after)
+        await check_and_apply_established_role(after)
 
-async def check_and_apply_established_role(member):
+def set_run_status(run_date, num_users_updated, status, error_message=None):
     connection = get_db_connection()
     cursor = connection.cursor()
-
-    cursor.execute("SELECT join_date, has_established_role FROM users WHERE user_id = %s", (member.id,))
-    result = cursor.fetchone()
-
-    if result is not None:
-        join_date, has_established_role = result
-        if not has_established_role and datetime.utcnow() - join_date >= timedelta(days=int(DAYS_WINDOW)):
-            established_role = discord.utils.get(member.guild.roles, name="Established User")
-            if established_role not in member.roles:
-                await member.add_roles(established_role)
-                update_user_in_db(member.id, True)
-
+    
+    cursor.callproc("add_run_status", (run_date, num_users_updated, status, error_message))
+    
+    connection.commit()
     cursor.close()
     connection.close()
 
-def next_run_time(hour, minute, timezone):
-    now = datetime.now(timezone)
-    next_run = datetime.combine(now.date(), time(hour, minute), tzinfo=timezone)
-    if next_run <= now:
-        next_run += timedelta(days=1)
-    return next_run
+def add_user_to_db(user_id, join_date, has_established_role):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    
+    cursor.callproc("add_user", (user_id, join_date, has_established_role))
+    
+    connection.commit()
+    cursor.close()
+    connection.close()
 
-async def wait_until_next_run_time(hour, minute, timezone):
-    next_run = next_run_time(hour, minute, timezone)
-    await asyncio.sleep((next_run - datetime.now(timezone)).total_seconds())
+def update_user_in_db(user_id, has_established_role):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    
+    cursor.callproc("update_user", (user_id, has_established_role))
+    
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+def get_users_to_update(required_days):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    
+    cursor.callproc("get_users_to_update", (required_days,))
+    
+    results = cursor.stored_results()
+    user_ids_to_update = [row[0] for row in results.fetchone()]
+    
+    cursor.close()
+    connection.close()
+    
+    return user_ids_to_update
+
+async def check_and_apply_established_role(member):
+    established_role = discord.utils.get(member.guild.roles, id=ROLE_ID)
+
+    has_role = any(role == established_role for role in member.roles)
+    join_date = member.joined_at
+    days_since_join = (datetime.utcnow() - join_date).days
+
+    if not has_role and days_since_join >= REQUIRED_DAYS:
+        await member.add_roles(established_role)
+        update_user_in_db(member.id, True)
+
+async def apply_roles_from_db():
+    user_ids_to_update = get_users_to_update(REQUIRED_DAYS)
+    
+    num_users_updated = 0
+
+    for guild in bot.guilds:
+        for user_id in user_ids_to_update:
+            member = guild.get_member(user_id)
+            if member is not None:
+                await check_and_apply_established_role(member)
+                num_users_updated += 1
+
+    return num_users_updated
 
 @tasks.loop(hours=1)
 async def apply_established_role():
     cst = pytz.timezone('US/Central')
-    if datetime.now(cst).hour == TRIGGER_HOUR:
-        for guild in bot.guilds:
-            for member in guild.members:
-                await check_and_apply_established_role(member)
+    if datetime.now(cst).hour == TASK_HOUR:
+        try:
+            num_users_updated = await apply_roles_from_db()
+            set_run_status(datetime.utcnow(), num_users_updated, 'success')
+        except Exception as e:
+            set_run_status(datetime.utcnow(), 0, 'failure', str(e))
+
+async def wait_until_next_run_time(hour, minute, tz):
+    now = datetime.now(tz)
+    next_run = datetime(now.year, now.month, now.day, hour, minute, tzinfo=tz)
+
+    if now > next_run:
+        next_run += timedelta(days=1)
+
+    await discord.utils.sleep_until(next_run.astimezone(datetime.utcnow().tzinfo))
 
 apply_established_role.before_loop
 async def before_apply_established_role():
     await bot.wait_until_ready()
     cst = pytz.timezone('US/Central')
-    await wait_until_next_run_time
+    await wait_until_next_run_time(TASK_HOUR, 0, cst)
+
+bot.run(TOKEN)
