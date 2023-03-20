@@ -1,3 +1,5 @@
+##Disclaimer: This code was written by ChatGPT and the prompts it took to get it this far. The full dialog will eventually be included as part of the repo for documentorial purposes and to see the reason why some things were done the way the were.
+
 # Discord Established User Bot
 
 This Discord bot assigns the "Established User" role to members who have been on the server for a specified number of days (default is 30 days). The bot utilizes a MySQL database to store user join dates and roles. It checks for users who qualify for the role and assigns it if needed. The bot also logs the status of its nightly checks.
