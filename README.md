@@ -1,54 +1,47 @@
-# discord-timed-roles-bot
-bot to apply a role after specifid timeframe has elapsed
+# Discord Established User Bot
 
+This Discord bot assigns the "Established User" role to members who have been on the server for a specified number of days (default is 30 days). The bot utilizes a MySQL database to store user join dates and roles. It checks for users who qualify for the role and assigns it if needed. The bot also logs the status of its nightly checks.
 
+## Features
 
+- Assigns "Established User" role after a specified number of days
+- Checks when a user joins the server and logs the user to the database
+- Monitors user role changes and ensures they have the correct role
+- Runs a nightly check at a specified time to update users who qualify for the role
+- Logs the status of the nightly checks in the database
 
-# OKC Discord DB Migration
-
-This repository contains a Python script for creating a MySQL database, a table, and stored procedures for an OKC Discord bot.
-
-## Prerequisites
-
-Ensure you have the following installed:
+## Requirements
 
 - Python 3.6 or higher
-- Pip (Python package installer)
+- MySQL 5.6.41-84.1 or higher
+- Discord.py (Pycord) library
+- mysql-connector-python library
+- python-dotenv library
 
 ## Installation
 
-1. Install the required packages:
+1. Clone the repository:
+git clone https://github.com/atomriot/discord-timed-roles-bot.git
 
-   ```
-   pip install python-dotenv mysql-connector-python
-   ```
+2. Navigate to the project folder:
+cd discord-timed-roles-bot
 
-2. Create a `.env` file in the same directory as the `db_migrations.py` script with the following content:
+3. Install the required Python packages:
+pip install -r requirements.txt
 
-   ```
-   DB_HOST=localhost
-   DB_USER=username
-   DB_PASSWORD=password
-   DB_NAME=okc_discord_db
-   ```
+4. Copy the `.env.sample` file to be `.env` and add your environment values
 
-   Replace the placeholders with your MySQL connection details.
+5. Run the `db_migrations.py` script to create the necessary database, tables, and stored procedures:
+python db_migrations.py
 
-## Running the Migration
+## Usage
 
-1. In your terminal or command prompt, navigate to the directory containing the `db_migrations.py` script.
+1. Start the bot:
+python bot.py
 
-2. Run the migration script using Python:
+The bot will now monitor user join events and role changes, and perform nightly checks to update user roles as needed.
 
-   ```
-   python db_migrations.py
-   ```
+## Notes
 
-   This command will execute the script, which will:
-
-   - Load the database configuration from the `.env` file
-   - Create the `okc_discord_db` database if it doesn't exist
-   - Create the `users` table if it doesn't exist
-   - Create the `add_user` and `update_user` stored procedures if they don't exist
-
-   If everything is set up correctly, the script should run without any errors, and the migration will be applied to your MySQL server.
+- The bot requires the appropriate permissions to manage roles on the Discord server.
+- The bot should be placed higher in the role hierarchy than the "Established User" role in order to assign it to users.
